@@ -1,0 +1,111 @@
+name: Build UFI003 Kernel
+
+on:
+  push:
+    branches:
+      - "**"
+    tags:
+      - "**"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build kernel and boot images
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Enable arm64 binfmt
+        run: docker run --privileged --rm tonistiigi/binfmt --install arm64
+
+      - name: Build in Debian 13
+        run: |
+          docker run --privileged --rm \
+            -v "$PWD:/work" \
+            -w /work \
+            -e DEBIAN_FRONTEND=noninteractive \
+            -e JOBS="$(nproc)" \
+            debian:trixie \
+            bash -lc '
+              set -euo pipefail
+              apt-get update
+              apt-get install -y git ca-certificates
+              git config --global --add safe.directory /work
+              ./build.sh all
+            '
+
+      - name: Pack artifacts separately
+        id: pack
+        run: |
+          set -euo pipefail
+
+          if [[ ! -d artifacts ]] || ! find artifacts -type f -print -quit | grep -q .; then
+            echo "::error::No files found in artifacts directory."
+            exit 1
+          fi
+
+          archive_dir="packed-artifacts"
+          rm -rf "$archive_dir"
+          mkdir -p "$archive_dir"
+
+          safe_ref="$(printf '%s' "${GITHUB_REF_NAME:-ref}" | tr '/:@ ' '----' | tr -cd 'A-Za-z0-9._-')"
+          if [[ -z "$safe_ref" ]]; then
+            safe_ref="ref"
+          fi
+
+          artifact_count=0
+          while IFS= read -r -d '' artifact_path; do
+            relative_path="${artifact_path#artifacts/}"
+            safe_name="$(printf '%s' "$relative_path" | tr '/:@ ' '----' | tr -cd 'A-Za-z0-9._-')"
+            if [[ -z "$safe_name" ]]; then
+              safe_name="artifact-$artifact_count"
+            fi
+
+            archive_path="$archive_dir/${safe_name}.tar.gz"
+            if [[ -e "$archive_path" ]]; then
+              archive_path="$archive_dir/${artifact_count}-${safe_name}.tar.gz"
+            fi
+
+            tar -C "$(dirname "$artifact_path")" -czf "$archive_path" "$(basename "$artifact_path")"
+            artifact_count=$((artifact_count + 1))
+          done < <(find artifacts -type f -print0 | sort -z)
+
+          upload_name="ufi003-kernel-artifacts-${safe_ref}-${GITHUB_SHA::7}"
+          echo "archive_dir=$archive_dir" >> "$GITHUB_OUTPUT"
+          echo "upload_name=$upload_name" >> "$GITHUB_OUTPUT"
+
+      - name: Upload packed artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.pack.outputs.upload_name }}
+          path: ${{ steps.pack.outputs.archive_dir }}/*.tar.gz
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          release_files=(${{ steps.pack.outputs.archive_dir }}/*.tar.gz)
+
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "${release_files[@]}" \
+              --repo "$GITHUB_REPOSITORY" \
+              --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "${release_files[@]}" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$GITHUB_REF_NAME" \
+              --generate-notes
+          fi

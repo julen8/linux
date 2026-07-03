@@ -359,13 +359,12 @@ build_bootimg() {
     rootfs_url="https://$DOWNLOAD_SERVER$(curl -m 10 -fsSL "https://$DOWNLOAD_SERVER$DOWNLOAD_INDEX_PATH" | grep "$DOWNLOAD_DISTRO" | cut -f 6 -d ';')rootfs.tar.xz"
     [[ "$rootfs_url" != "https://${DOWNLOAD_SERVER}rootfs.tar.xz" ]] || die "Failed to resolve rootfs download URL."
 
-    sudo rm -rf "$work_dir"
+    run_as_root rm -rf "$work_dir"
     mkdir -p "$rootfs_dir"
     mkdir -p "$rootfs_dir/tmp"
 
     log "Downloading rootfs from $rootfs_url"
-    cp /home/julen/data/ufi003/debian13-rootfs.tar.xz "$rootfs_tarball"
-    #curl -L -o "$rootfs_tarball" "$rootfs_url"
+    curl -L -o "$rootfs_tarball" "$rootfs_url"
     tar -xf "$rootfs_tarball" -C "$rootfs_dir"
     rm -f "$rootfs_tarball"
     mkdir -p "$rootfs_dir/proc" "$rootfs_dir/dev/pts" "$rootfs_dir/sys"
@@ -397,9 +396,9 @@ build_bootimg() {
 clean_artifacts() {
     log "Removing build artifacts and temporary files"
 
-    sudo rm -rf "$ROOT_DIR/.bootimg-work"
-    sudo rm -rf "$ARTIFACTS_DIR"
-    sudo rm -rf "$ROOT_DIR/linux.tar.gz"
+    run_as_root rm -rf "$ROOT_DIR/.bootimg-work"
+    run_as_root rm -rf "$ARTIFACTS_DIR"
+    run_as_root rm -rf "$ROOT_DIR/linux.tar.gz"
 
     find "$ROOT_DIR/.." -maxdepth 1 -type f \( \
         -name 'linux-image-*.deb' -o \
