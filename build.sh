@@ -9,6 +9,8 @@ export PATH="$PATH:/sbin:/usr/sbin"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ARTIFACTS_DIR="$ROOT_DIR/artifacts"
 DEFAULT_JOBS="$(( $(getconf _NPROCESSORS_ONLN) * 2 ))"
+DEBIAN_MIRROR="${DEBIAN_MIRROR:-http://deb.debian.org/debian}"
+DEBIAN_SECURITY_MIRROR="${DEBIAN_SECURITY_MIRROR:-http://deb.debian.org/debian-security}"
 ARCH_VALUE="arm64"
 CROSS_COMPILE_VALUE="aarch64-linux-gnu-"
 APT_UPDATED=0
@@ -67,6 +69,9 @@ Environment overrides:
   ARTIFACTS_DIR=<path>  Output directory for generated artifacts
   ARCH=<arch>           Defaults to arm64
   CROSS_COMPILE=<pref>  Defaults to aarch64-linux-gnu-
+    DEBIAN_MIRROR=<url>   Debian mirror, default: http://deb.debian.org/debian
+    DEBIAN_SECURITY_MIRROR=<url>
+                                                 Debian security mirror, default: http://deb.debian.org/debian-security
 
 This script requires Debian 13 (Trixie) and will install missing packages automatically.
 EOF
@@ -246,9 +251,9 @@ EOI
 #echo "nameserver 8.8.8.8" > /etc/resolv.conf
 
 cat <<EOI > /etc/apt/sources.list
-deb http://mirrors.ustc.edu.cn/debian trixie main contrib non-free non-free-firmware
-deb http://mirrors.ustc.edu.cn/debian trixie-updates main contrib non-free non-free-firmware
-deb http://mirrors.ustc.edu.cn/debian-security/ trixie-security main contrib non-free non-free-firmware
+deb $DEBIAN_MIRROR trixie main contrib non-free non-free-firmware
+deb $DEBIAN_MIRROR trixie-updates main contrib non-free non-free-firmware
+deb $DEBIAN_SECURITY_MIRROR trixie-security main contrib non-free non-free-firmware
 EOI
 
 apt-get update

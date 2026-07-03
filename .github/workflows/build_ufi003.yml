@@ -32,6 +32,8 @@ jobs:
             -v "$PWD:/work" \
             -w /work \
             -e DEBIAN_FRONTEND=noninteractive \
+            -e DEBIAN_MIRROR=http://deb.debian.org/debian \
+            -e DEBIAN_SECURITY_MIRROR=http://deb.debian.org/debian-security \
             -e JOBS="$(nproc)" \
             debian:trixie \
             bash -lc '
